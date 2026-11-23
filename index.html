@@ -318,9 +318,9 @@ function bump(){clearTimeout(idleT);if(ME)idleT=setTimeout(()=>{firebase.auth().
 function startData(){const timer=setTimeout(()=>{if(mode==='loading')banner('تعذّر الوصول إلى البيانات حتى الآن. تحقق من الاتصال بالإنترنت.')},10000);
   let left=COLS.length+2;const ready=()=>{if(--left===0){clearTimeout(timer);mode='db';banner('')}};
   const onErr=e=>{clearTimeout(timer);banner('تعذّر تحميل البيانات: '+fbErr(e))};
-  let f0=0,f1=0;unsubs.push(db.doc('tenants/'+T).onSnapshot(s=>{TEN=s.exists?{...s.data(),id:s.id}:null;if(!f1&&!s.metadata.fromCache){f1=1;ready()}applyRole();schedule()},onErr));unsubs.push(db.doc('platform/main').onSnapshot(s=>{PLAT=s.exists?s.data():{};schedule()},()=>{}));
-  unsubs.push(db.doc(TP()+'settings/main').onSnapshot(s=>{S.settings=s.exists?{...s.data()}:{};if(!f0&&!s.metadata.fromCache){f0=1;ready()}schedule()},onErr));
-  COLS.forEach(c=>{let f=0;unsubs.push(db.collection(TP()+c).onSnapshot(q=>{const o={};q.docs.forEach(d=>o[d.id]={...d.data(),id:d.id});S[c]=o;if(!f&&!q.metadata.fromCache){f=1;ready()}schedule()},onErr))});
+  let f0=0,f1=0;unsubs.push(db.doc('tenants/'+T).onSnapshot({includeMetadataChanges:true},s=>{TEN=s.exists?{...s.data(),id:s.id}:null;if(!f1&&!s.metadata.fromCache){f1=1;ready()}applyRole();schedule()},onErr));unsubs.push(db.doc('platform/main').onSnapshot(s=>{PLAT=s.exists?s.data():{};schedule()},()=>{}));
+  unsubs.push(db.doc(TP()+'settings/main').onSnapshot({includeMetadataChanges:true},s=>{S.settings=s.exists?{...s.data()}:{};if(!f0&&!s.metadata.fromCache){f0=1;ready()}schedule()},onErr));
+  COLS.forEach(c=>{let f=0;unsubs.push(db.collection(TP()+c).onSnapshot({includeMetadataChanges:true},q=>{const o={};q.docs.forEach(d=>o[d.id]={...d.data(),id:d.id});S[c]=o;if(!f&&!q.metadata.fromCache){f=1;ready()}schedule()},onErr))});
   if(ROLE==='admin')unsubs.push(db.collection('users').where('tenant','==',T).onSnapshot(q=>{USERS={};q.docs.forEach(d=>USERS[d.id]={...d.data(),id:d.id});schedule()},()=>{}));
   if(SUPER()){unsubs.push(db.collection('tenants').onSnapshot(q=>{TENS={};q.docs.forEach(d=>TENS[d.id]={...d.data(),id:d.id});schedule()},()=>{}));unsubs.push(db.collection('users').onSnapshot(q=>{ALLU={};q.docs.forEach(d=>ALLU[d.id]={...d.data(),id:d.id});schedule()},()=>{}))}
   bump()}
