@@ -387,16 +387,26 @@ async function init(){const C=window.FIREBASE_CONFIG||{};showGate();$('#gate-log
   $('#lg-topin').onclick=e=>{e.preventDefault();sessionStorage.removeItem('lgform');showGate()};
   $('#lg-forgot').onclick=async e=>{e.preventDefault();const em=$('#lg-email').value.trim();if(!em){gateMsg('اكتب بريدك أولًا ثم اضغط «نسيت كلمة المرور».');return}try{await firebase.auth().sendPasswordResetEmail(em);gateMsg('أُرسل رابط تعيين كلمة المرور إلى بريدك.')}catch(err){gateMsg(fbErr(err))}};
   firebase.auth().onAuthStateChanged(async u=>{stopData();if(!u){showGate();return}
-    try{const ref=db.doc('users/'+u.uid),ct=(()=>{try{return localStorage.getItem('tn-'+u.uid)||''}catch(_){return''}})(),pre=ct?db.doc('tenants/'+ct).get().catch(()=>null):null;let s=await ref.get();
-      const isSup=(u.email||'').toLowerCase()===String(window.SUPER_EMAIL||'').trim().toLowerCase();
+    const isSup=(u.email||'').toLowerCase()===String(window.SUPER_EMAIL||'').trim().toLowerCase(),PK='pf-'+u.uid,ref=db.doc('users/'+u.uid);
+    const pf=(()=>{try{return JSON.parse(localStorage.getItem(PK)||'null')}catch(_){return null}})();
+    const keep=(d,ten)=>{try{localStorage.setItem(PK,JSON.stringify({d,ten}))}catch(_){}};
+    const enter=(d,ten)=>{ME={uid:u.uid,email:u.email,...d};ROLE=RL[d.role]?d.role:'viewer';T=HOME=d.tenant;if(ten)TEN=ten;
+      if(ROLE==='cashier'){pinSave(u.email,d.name);sessionStorage.removeItem('lgform')}PIN.busy=0;PIN.u=null;PIN.v='';hideGate();startData();applyRole()};
+    const kick=async m=>{try{localStorage.removeItem(PK)}catch(_){}await firebase.auth().signOut();setTimeout(()=>gateMsg(m),60)};
+    const bad=d=>!d?'هذا الحساب غير مضاف إلى البرنامج. اطلب من المدير إضافتك.':d.deleted?'هذا الحساب محذوف. راجع المدير.':d.active!==true?'حسابك موقوف. راجع المدير.':!d.tenant?'هذا الحساب غير مرتبط بأي منشأة. راجع مزوّد الخدمة.':'';
+    // دخول سريع: بيانات الحساب محفوظة على هذا الجهاز من آخر دخول، ويُتحقق منها في الخلفية
+    if(pf&&pf.d&&!bad(pf.d)&&(isSup||pf.ten)){enter(pf.d,pf.ten);
+      (async()=>{try{const s=await ref.get(),d=s.exists?s.data():null,m=bad(d);if(m)return kick(m);
+        if(d.tenant!==pf.d.tenant||d.role!==pf.d.role){keep(d,null);location.reload();return}
+        let ten=pf.ten;if(!isSup){const ts=await db.doc('tenants/'+d.tenant).get();if(!ts.exists)return kick('حساب المنشأة غير موجود. راجع مزوّد الخدمة.');ten={...ts.data(),id:ts.id}}
+        keep(d,ten);ME={uid:u.uid,email:u.email,...d};schedule()}catch(_){}})();return}
+    const slow=setTimeout(()=>{const m=$('#pin-msg');if(m&&PIN.busy)m.textContent='الاتصال بالخادم بطيء… لحظات';const g=$('#gate-msg');if(g&&!$('#loginf').hidden)g.textContent='الاتصال بالخادم بطيء… لحظات'},6000);
+    try{const ct=pf&&pf.d?pf.d.tenant:'',pre=ct&&!isSup?db.doc('tenants/'+ct).get().catch(()=>null):null;let s=await ref.get();
       if(isSup&&(!s.exists||!s.data().tenant)){const tr=db.doc('tenants/sahm');if(!(await tr.get()).exists)await tr.set({name:'سهم الأمان للمراقبة الأمنية',active:true,expMs:4102444800000,plan:'مالك المنصة',home:true,createdAt:new Date().toISOString()});await ref.set({name:'المدير',email:u.email,role:'admin',active:true,tenant:'sahm',createdAt:new Date().toISOString()});s=await ref.get()}
-      const d=s.exists?s.data():null;
-      if(!d||d.active!==true){gateMsg(!d?'هذا الحساب غير مضاف إلى البرنامج. اطلب من المدير إضافتك.':d.deleted?'هذا الحساب محذوف. راجع المدير.':'حسابك موقوف. راجع المدير.');await firebase.auth().signOut();return}
-      if(!d.tenant){gateMsg('هذا الحساب غير مرتبط بأي منشأة. راجع مزوّد الخدمة.');await firebase.auth().signOut();return}
-      ME={uid:u.uid,email:u.email,...d};ROLE=RL[d.role]?d.role:'viewer';T=HOME=d.tenant;
-      try{localStorage.setItem('tn-'+u.uid,T)}catch(_){}if(!isSup){const p0=pre&&ct===T?await pre:null,ts=p0&&p0.exists?p0:await db.doc('tenants/'+T).get();if(!ts.exists){gateMsg('حساب المنشأة غير موجود. راجع مزوّد الخدمة.');await firebase.auth().signOut();return}TEN={...ts.data(),id:ts.id}}
-      if(ROLE==='cashier'){pinSave(u.email,d.name);sessionStorage.removeItem('lgform')}PIN.busy=0;PIN.u=null;PIN.v='';hideGate();startData();applyRole()}
-    catch(err){gateMsg('تعذّر التحقق من الحساب — '+fbErr(err));await firebase.auth().signOut()}})}
+      const d=s.exists?s.data():null,m=bad(d);if(m){clearTimeout(slow);gateMsg(m);await firebase.auth().signOut();return}
+      let ten=null;if(!isSup){const p0=pre&&ct===d.tenant?await pre:null,ts=p0&&p0.exists?p0:await db.doc('tenants/'+d.tenant).get();if(!ts.exists){clearTimeout(slow);gateMsg('حساب المنشأة غير موجود. راجع مزوّد الخدمة.');await firebase.auth().signOut();return}ten={...ts.data(),id:ts.id}}
+      clearTimeout(slow);keep(d,ten);enter(d,ten)}
+    catch(err){clearTimeout(slow);gateMsg('تعذّر التحقق من الحساب — '+fbErr(err));await firebase.auth().signOut()}})}
 function rePin(id){const u=USERS[id];if(!u)return;modal(`${mh('تغيير الرقم السري: '+esc(u.name||''))}<form id="rpf" class="fgrid"><label><span>الرقم السري الجديد (4 إلى 6 أرقام)</span><input name="a" inputmode="numeric" autocomplete="off" dir="ltr" required></label><p class="hint full">يُنشأ للكاشير دخول جديد بنفس الاسم والصلاحية، ويُلغى الرقم القديم فورًا. مبيعاته السابقة تبقى باسمه.</p><div class="mf"><button class="btn" type="submit">حفظ</button><button type="button" class="btn ghost" data-act="close">إلغاء</button></div></form>`);
   $('#rpf').onsubmit=async e=>{e.preventDefault();const pin=AD(readForm(e.target).a),b=e.target.querySelector('[type=submit]');if(!/^\d{4,6}$/.test(pin)){toast('الرقم السري من 4 إلى 6 أرقام',1);return}b.disabled=true;let app2,cr;
     try{app2=firebase.apps.find(a=>a.name==='sec')||firebase.initializeApp(window.FIREBASE_CONFIG,'sec');cr=await app2.auth().createUserWithEmailAndPassword(posMail(),PINPW(pin));const nu=cr.user.uid,at=new Date().toISOString();
